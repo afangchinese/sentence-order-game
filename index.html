@@ -1,0 +1,275 @@
+<!DOCTYPE html>
+<html lang="zh-Hant">
+<head>
+  <meta charset="UTF-8" />
+  <title>句子排列遊戲</title>
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <script src="https://cdn.tailwindcss.com"></script>
+  <script type="importmap">
+    {
+      "imports": {
+        "react": "https://esm.sh/react@18.2.0",
+        "react-dom/client": "https://esm.sh/react-dom@18.2.0/client",
+        "pinyin-pro": "https://esm.sh/pinyin-pro@3.7.0",
+        "lodash/shuffle": "https://esm.sh/lodash.shuffle@4.2.0",
+        "sortablejs": "https://esm.sh/sortablejs@1.15.0"
+      }
+    }
+  </script>
+</head>
+<body class="bg-sky-50">
+  <div id="root" class="p-6 max-w-3xl mx-auto"></div>
+
+  <script type="module">
+    import React, { useState, useEffect } from 'react';
+    import { createRoot } from 'react-dom/client';
+    import { pinyin } from 'pinyin-pro';
+    import shuffle from 'lodash/shuffle';
+    import Sortable from 'sortablejs';
+    
+
+    function speak(text) {
+      const utterance = new SpeechSynthesisUtterance(text);
+      utterance.lang = 'zh-TW';
+      speechSynthesis.cancel(); // 先取消上一次
+      speechSynthesis.speak(utterance);
+    }
+
+      const zhuyinFallback = {
+      我: 'ㄨㄛˇ',
+      是: 'ㄕˋ',
+      老師: 'ㄌㄠˇ ㄕ',
+      學生: 'ㄒㄩㄝˊ ㄕㄥ',
+    };
+
+    function Game() {
+      const [questions, setQuestions] = useState([]);
+      const [originalQuestions, setOriginalQuestions] = useState([]);
+      const [currentIndex, setCurrentIndex] = useState(0);
+      const [mode, setMode] = useState('pinyin');
+      const [gameStarted, setGameStarted] = useState(false);
+      const [startTime, setStartTime] = useState(null);
+      const [elapsed, setElapsed] = useState(0);
+      const [errorCount, setErrorCount] = useState(0);
+      const [correctCount, setCorrectCount] = useState(0);
+      const [finished, setFinished] = useState(false);
+      const [inputRaw, setInputRaw] = useState('他/不是/孩子\n我/是/老師\n我/是/學生');
+      const [zhuyinCache, setZhuyinCache] = useState({});
+      const parsedCurrent = questions[currentIndex];
+
+      const generateShareLink = () => {
+        const url = `${window.location.origin}${window.location.pathname}?q=${encodeURIComponent(JSON.stringify(originalQuestions))}`;
+        navigator.clipboard.writeText(url).then(() => alert('分享連結已複製！'));
+      };
+
+      useEffect(() => {
+        const params = new URLSearchParams(window.location.search);
+        const encoded = params.get('q');
+        if (encoded) {
+          try {
+            const parsed = JSON.parse(decodeURIComponent(encoded));
+            setQuestions(parsed);
+            setOriginalQuestions(parsed);
+            setGameStarted(true);
+            setStartTime(Date.now());
+            setElapsed(0);
+            setErrorCount(0);
+            setCorrectCount(0);
+            setCurrentIndex(0);
+            setFinished(false);
+          } catch (err) {
+            console.error('載入分享題庫失敗', err);
+          }
+        }
+      }, []);
+
+      useEffect(() => {
+        let timer;
+        if (gameStarted && startTime && !finished) {
+          timer = setInterval(() => {
+            setElapsed(Math.floor((Date.now() - startTime) / 1000));
+          }, 1000);
+        }
+        return () => {
+          if (timer) clearInterval(timer);
+        };
+      }, [gameStarted, startTime, finished]);
+
+      useEffect(() => {
+        if (!parsedCurrent) return;
+        const optionZone = document.getElementById('option-zone');
+        const answerZone = document.getElementById('answer-zone');
+
+        optionZone.innerHTML = '';
+        answerZone.innerHTML = '';
+
+        if (mode === 'zhuyin') {
+          parsedCurrent.forEach(word => {
+            if (!zhuyinCache[word]) {
+              fetch(`https://www.moedict.tw/uni/${encodeURIComponent(word)}.json`)
+                .then(res => res.json())
+                .then(data => {
+                  const raw = data?.heteronyms?.[0]?.bopomofo || '';
+                  const isValid = /^[\u3100-\u312F\u02CA\u02C7\u02CB\u02D9\s]+$/.test(raw);
+                  const fallback = zhuyinFallback[word];
+                  const zhuyin = isValid ? raw : (fallback || '[無注音]');
+                  setZhuyinCache(prev => ({ ...prev, [word]: zhuyin }));
+                })
+                .catch(() => {
+                  setZhuyinCache(prev => ({ ...prev, [word]: '[錯誤]' }));
+                });
+            }
+          });
+        }
+
+        shuffle(parsedCurrent).forEach(word => {
+          const div = document.createElement('div');
+          div.className = 'w-[90px] p-2 border rounded bg-white text-center shadow cursor-pointer';
+          div.setAttribute('data-word', word);
+          // 去除 onclick 以免爆聲
+          div.innerHTML = `
+            <div class="word font-bold">${word}</div>
+            <div class="text-xs text-gray-600">${mode === 'pinyin' ? pinyin(word, { toneType: 'mark' }) : (zhuyinCache[word] || '查詢中...')}</div>
+          `;
+          optionZone.appendChild(div);
+        });
+
+        Sortable.create(optionZone, {
+          group: 'shared',
+          animation: 150,
+          sort: false,
+          onChoose: (evt) => {
+            const dragged = evt.item?.getAttribute('data-word');
+            if (dragged) speak(dragged);
+          }
+        });
+
+        Sortable.create(answerZone, {
+          group: 'shared',
+          animation: 150,
+          onStart: () => {
+            if (!startTime) setStartTime(Date.now());
+          },
+          onSort: () => {
+            setTimeout(() => {
+              const order = Array.from(answerZone.children).map(div =>
+                div.querySelector('.word')?.textContent?.trim()
+              );
+              const correct = parsedCurrent;
+              const match = JSON.stringify(order) === JSON.stringify(correct);
+
+              if (match && order.length === correct.length) {   
+                setCorrectCount(c => c + 1);
+                if (currentIndex + 1 === questions.length) {
+                  setFinished(true);
+                  new Audio('https://www.soundjay.com/human/sounds/applause-8.mp3').play();
+                } else {
+                  setCurrentIndex(i => i + 1);
+                }
+              } else if (order.length === correct.length) {
+                new Audio('https://www.myinstants.com/media/sounds/error.mp3').play();
+                setErrorCount(c => c + 1);
+                const wrongTiles = Array.from(answerZone.children);
+                wrongTiles.forEach(tile => optionZone.appendChild(tile));
+              }
+            }, 0);
+          }
+        });
+
+      }, [parsedCurrent, mode, zhuyinCache]);
+
+      const parseInput = () => {
+        const lines = inputRaw.split('\n').map(line => line.trim()).filter(Boolean);
+        const parsed = lines.map(line => line.split('/').map(s => s.trim()));
+        setQuestions(parsed);
+        setOriginalQuestions(parsed);
+        setGameStarted(true);
+        setStartTime(Date.now());
+        setElapsed(0);
+        setErrorCount(0);
+        setCorrectCount(0);
+        setCurrentIndex(0);
+        setFinished(false);
+      };
+
+      return (
+        React.createElement('div', null,
+        React.createElement('p', { className: 'text-left text-xl font-bold text-gray-800 mb-4 leading-relaxed' }, '句子排列 🐥🐥🐥 '),
+          !gameStarted ? (
+            React.createElement('div', null,
+              React.createElement('h1', { className: 'text-xl font-bold text-gray-700 mb-2' }, '輸入題目（每行一題，用 / 斷句）'),
+              React.createElement('textarea', {
+                className: 'w-full h-40 p-2 border rounded',
+                placeholder: '例如：我/是/老師',
+                value: inputRaw,
+                onChange: e => setInputRaw(e.target.value)
+              }),
+              React.createElement('button', {
+                onClick: parseInput,
+                className: 'mt-4 px-4 py-2 bg-blue-600 text-white rounded'
+              }, '開始遊戲')
+            )
+          ) : finished ? (
+            React.createElement('div', { className: 'text-center' },
+              React.createElement('h2', { className: 'text-2xl font-bold mb-2' }, '🎉 全部完成！'),
+              React.createElement('p', null, `總時間：${elapsed} 秒`),
+              React.createElement('p', null, `完成題數：${correctCount}`),
+              React.createElement('p', null, `錯誤次數：${errorCount}`),
+              React.createElement('div', { className: 'flex justify-center gap-2 mt-4' },
+                React.createElement('button', {
+                  className: 'px-4 py-2 bg-blue-600 text-white rounded',
+                  onClick: () => {
+                    setQuestions(originalQuestions);
+                    setCurrentIndex(0);
+                    setCorrectCount(0);
+                    setErrorCount(0);
+                    setStartTime(Date.now());
+                    setElapsed(0);
+                    setFinished(false);
+                  }
+                }, '再玩一次'),
+                React.createElement('button', {
+                  className: 'px-4 py-2 bg-green-600 text-white rounded',
+                  onClick: generateShareLink
+                }, '分享遊戲')
+              )
+            )
+          ) : (
+            React.createElement('div', null,
+              React.createElement('div', { className: 'mb-2 flex justify-between' },
+                React.createElement('span', null, `第 ${currentIndex + 1} 題 / 共 ${questions.length} 題`),
+                React.createElement('button', {
+                  onClick: () => setMode(mode === 'pinyin' ? 'zhuyin' : 'pinyin'),
+                  className: 'text-sm px-2 py-1 border rounded bg-green-100'
+                }, `${mode === 'pinyin' ? '注音モードに変更' : '拼音モードに変更'}`)
+              ),
+              React.createElement('div', { className: 'grid grid-cols-1 gap-4' },
+                React.createElement('div', null,
+                  React.createElement('h3', { className: 'text-sm mb-1 text-gray-600' },),
+                  React.createElement('div', {
+                    id: 'option-zone',
+                    className: 'min-h-[80px] flex flex-wrap gap-2 border p-2 bg-rose-100 rounded'
+                  })
+                ),
+                React.createElement('div', null,
+                  React.createElement('h3', { className: 'text-sm mb-1 text-gray-600' }, '文を正しい順番に並べてください。'),
+                  React.createElement('div', {
+                    id: 'answer-zone',
+                    className: 'min-h-[80px] flex flex-wrap gap-2 border p-2 bg-white rounded'
+                  })
+                )
+              ),
+              React.createElement('div', { className: 'mt-4 text-sm text-gray-600' },
+                `時間：${elapsed}s　錯誤：${errorCount}`
+              )
+            )
+          )
+        )
+      );
+    }
+
+    const root = createRoot(document.getElementById('root'));
+    root.render(React.createElement(Game));
+  </script>
+</body>
+</html>
