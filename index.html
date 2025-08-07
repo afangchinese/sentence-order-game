@@ -23,7 +23,7 @@
   <script type="module">
     import React, { useState, useEffect } from 'react';
     import { createRoot } from 'react-dom/client';
-    import { pinyin } from 'pinyin-pro';
+    import { pinyin, customPinyin } from 'pinyin-pro';
     import shuffle from 'lodash/shuffle';
     import Sortable from 'sortablejs';
     
@@ -35,6 +35,22 @@
       speechSynthesis.speak(utterance);
     }
 
+
+    customPinyin({
+      爸爸: 'bàba',
+      子: 'zi',
+      妈妈: 'māma',
+      媽媽: 'māma',
+      姐姐: 'jiějie',
+      妹妹: 'mèimei',
+      饺子: 'jiǎozi',
+      奶奶: 'nǎinai',
+      爷爷: 'yéye',
+      爺爺: 'yéye',
+      弟弟: 'dìdi',
+      哥哥: 'gēge',
+      叔叔: 'shūshu',
+    });
       const zhuyinFallback = {
       我: 'ㄨㄛˇ',
       是: 'ㄕˋ',
@@ -103,24 +119,53 @@
         optionZone.innerHTML = '';
         answerZone.innerHTML = '';
 
-        if (mode === 'zhuyin') {
-          parsedCurrent.forEach(word => {
-            if (!zhuyinCache[word]) {
-              fetch(`https://www.moedict.tw/uni/${encodeURIComponent(word)}.json`)
+       const zhuyinOverrides = {
+       '爺爺和': 'ㄧㄝˊ ㄧㄝ˙ ㄏㄜˊ',
+        '爺爺': 'ㄧㄝˊ ㄧㄝ˙ ',
+       '爸爸': 'ㄅㄚˋ ㄅㄚ˙',
+       '媽媽': 'ㄇㄚ˙ ㄇㄚ',
+       };
+
+
+       if (mode === 'zhuyin') {
+  parsedCurrent.forEach(word => {
+    if (!zhuyinCache[word]) {
+      // ✅ 如果有 override 就直接用
+      if (zhuyinOverrides[word]) {
+        setZhuyinCache(prev => ({ ...prev, [word]: zhuyinOverrides[word] }));
+        return;
+      }
+
+      // ✅ 先試整個詞查詢
+      fetch(`https://www.moedict.tw/uni/${encodeURIComponent(word)}.json`)
+        .then(res => res.json())
+        .then(data => {
+          const raw = data?.heteronyms?.[0]?.bopomofo || '';
+          const isValid = /^[\u3100-\u312F\u02CA\u02C7\u02CB\u02D9\s]+$/.test(raw);
+          if (isValid) {
+            setZhuyinCache(prev => ({ ...prev, [word]: raw }));
+          } else {
+            // ❗ 整個詞查不到 → 改用逐字查詢
+            const chars = [...word];
+            const promises = chars.map(char =>
+              fetch(`https://www.moedict.tw/uni/${encodeURIComponent(char)}.json`)
                 .then(res => res.json())
-                .then(data => {
-                  const raw = data?.heteronyms?.[0]?.bopomofo || '';
-                  const isValid = /^[\u3100-\u312F\u02CA\u02C7\u02CB\u02D9\s]+$/.test(raw);
-                  const fallback = zhuyinFallback[word];
-                  const zhuyin = isValid ? raw : (fallback || '[無注音]');
-                  setZhuyinCache(prev => ({ ...prev, [word]: zhuyin }));
-                })
-                .catch(() => {
-                  setZhuyinCache(prev => ({ ...prev, [word]: '[錯誤]' }));
-                });
-            }
-          });
-        }
+                .then(cdata => cdata?.heteronyms?.[0]?.bopomofo || '[無]')
+                .catch(() => '[錯誤]')
+            );
+
+            Promise.all(promises).then(results => {
+              const combined = results.join(' ');
+              setZhuyinCache(prev => ({ ...prev, [word]: combined }));
+            });
+          }
+        })
+        .catch(() => {
+          setZhuyinCache(prev => ({ ...prev, [word]: '[錯誤]' }));
+        });
+    }
+  });
+}
 
         shuffle(parsedCurrent).forEach(word => {
           const div = document.createElement('div');
