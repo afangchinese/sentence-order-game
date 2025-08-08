@@ -1,3 +1,4 @@
+
 <!DOCTYPE html>
 <html lang="zh-Hant">
 <head>
@@ -26,31 +27,43 @@
     import { pinyin, customPinyin } from 'pinyin-pro';
     import shuffle from 'lodash/shuffle';
     import Sortable from 'sortablejs';
+ 
+    
     
 
-    function speak(text) {
-      const utterance = new SpeechSynthesisUtterance(text);
-      utterance.lang = 'zh-TW';
-      speechSynthesis.cancel(); // 先取消上一次
-      speechSynthesis.speak(utterance);
-    }
 
+    const CUSTOM_PINYIN_HANS = {
+  爸爸: 'bàba',
+  子: 'zi',
+  妈妈: 'māma',
+  姐姐: 'jiějie',
+  妹妹: 'mèimei',
+  饺子: 'jiǎozi',
+  奶奶: 'nǎinai',
+  爷爷: 'yéye',
+  弟弟: 'dìdi',
+  哥哥: 'gēge',
+  叔叔: 'shūshu',
+  喜欢: 'xǐhuan',   // ← 簡體
+  早上: 'zǎoshang', 
+  晚上: 'wǎnshang',
+  们: 'men',
+};
 
-    customPinyin({
-      爸爸: 'bàba',
-      子: 'zi',
-      妈妈: 'māma',
-      媽媽: 'māma',
-      姐姐: 'jiějie',
-      妹妹: 'mèimei',
-      饺子: 'jiǎozi',
-      奶奶: 'nǎinai',
-      爷爷: 'yéye',
-      爺爺: 'yéye',
-      弟弟: 'dìdi',
-      哥哥: 'gēge',
-      叔叔: 'shūshu',
-    });
+const CUSTOM_PINYIN_HANT = {
+  爸爸: 'bàba',
+  子: 'zi',
+  媽媽: 'māma',
+  姐姐: 'jiějie',
+  妹妹: 'mèimei',
+  餃子: 'jiǎozi',
+  奶奶: 'nǎinai',
+  爺爺: 'yéye',
+  弟弟: 'dìdi',
+  哥哥: 'gēge',
+  叔叔: 'shūshu', // ← 繁體
+  們: 'men',
+};
       const zhuyinFallback = {
       我: 'ㄨㄛˇ',
       是: 'ㄕˋ',
@@ -59,6 +72,9 @@
     };
 
     function Game() {
+      const [lang, setLang] = useState('zh-Hant');
+      const [voice, setVoice] = useState(null);
+      const [availableVoices, setAvailableVoices] = useState([]);
       const [questions, setQuestions] = useState([]);
       const [originalQuestions, setOriginalQuestions] = useState([]);
       const [currentIndex, setCurrentIndex] = useState(0);
@@ -71,33 +87,125 @@
       const [finished, setFinished] = useState(false);
       const [inputRaw, setInputRaw] = useState('他/不是/孩子\n我/是/老師\n我/是/學生');
       const [zhuyinCache, setZhuyinCache] = useState({});
+      const [pendingVoiceName, setPendingVoiceName] = useState(null);
+      const hasStartedRef = React.useRef(false);
       const parsedCurrent = questions[currentIndex];
+      const texts = {
+    'labelLanguage': { 'zh-Hant': '語言', 'zh-Hans': '语言' },
+    'labelVoice':    { 'zh-Hant': '語音', 'zh-Hans': '语音' },
+    'start': { 'zh-Hant': '開始遊戲', 'zh-Hans': '开始游戏' },
+    'title': { 'zh-Hant': '句子排列 🐥🐥🐥', 'zh-Hans': '句子排列 🐥🐥🐥' },
+    'completed': { 'zh-Hant': '🎉 全部完成！', 'zh-Hans': '🎉 全部完成！' },
+    'totalTime': { 'zh-Hant': '總時間', 'zh-Hans': '总时间' },
+    'questionsDone': { 'zh-Hant': '完成題數', 'zh-Hans': '完成题数' },
+    'errors': { 'zh-Hant': '錯誤次數', 'zh-Hans': '错误次数' },
+    'replay': { 'zh-Hant': '再玩一次', 'zh-Hans': '再玩一次' },
+    'share': { 'zh-Hant': '分享遊戲', 'zh-Hans': '分享游戏' },
+    'timeAndError': { 'zh-Hant': '時間', 'zh-Hans': '时间' },
+    'errorCount': { 'zh-Hant': '錯誤', 'zh-Hans': '错误' },
+    'questionPrefix': { 'zh-Hant': '第', 'zh-Hans': '第' },
+    'questionSuffix': { 'zh-Hant': '題', 'zh-Hans': '题' },
+    'totalPrefix': { 'zh-Hant': '共', 'zh-Hans': '共' },
+    'totalSuffix': { 'zh-Hant': '題', 'zh-Hans': '题' },
+
+  };
+
+  useEffect(() => {
+  if (lang === 'zh-Hans') {
+    customPinyin(CUSTOM_PINYIN_HANS);
+  } else {
+    customPinyin(CUSTOM_PINYIN_HANT);
+  }
+  // 這裡不需要做其他事，之後 pinyin() 會用最新的規則
+}, [lang]);
+
+       useEffect(() => {
+  const updateVoices = () => {
+    const voices = window.speechSynthesis.getVoices();
+    const chineseVoices = voices.filter(v => v.lang.startsWith('zh'));
+    setAvailableVoices(chineseVoices);
+
+    // 1) 分享連結有指定語音名稱 → 優先選
+    if (pendingVoiceName) {
+      const matched = chineseVoices.find(v => v.name === pendingVoiceName);
+      if (matched) {
+        setVoice(matched);
+        setPendingVoiceName(null); // 用完就清掉
+        return;
+      }
+    }
+
+    // 2) 沒有指定或找不到 → 沒有選過時才給預設
+    if (!voice && chineseVoices.length > 0) {
+      setVoice(chineseVoices[0]);
+    }
+  };
+
+  updateVoices();
+  window.speechSynthesis.onvoiceschanged = updateVoices;
+}, [pendingVoiceName]);  // ← 加上依賴，讓 pendingVoiceName 改變時可再嘗試一次
+
+
+      function speak(text) {
+      const utterance = new SpeechSynthesisUtterance(text);
+      if (voice) {
+       utterance.voice = voice;
+       utterance.lang = voice.lang || (lang === 'zh-Hant' ? 'zh-TW' : 'zh-CN');
+     } else {
+       utterance.lang = lang === 'zh-Hant' ? 'zh-TW' : 'zh-CN';
+     }
+     speechSynthesis.cancel();
+     setTimeout(() => speechSynthesis.speak(utterance), 0);
+  }
+
 
       const generateShareLink = () => {
-        const url = `${window.location.origin}${window.location.pathname}?q=${encodeURIComponent(JSON.stringify(originalQuestions))}`;
+      const payload = {
+        questions,                 // 目前的亂序題目（照你當前看到的順序）
+        lang,                      // 遊戲語言 zh-Hant / zh-Hans
+        mode,                      // pinyin / zhuyin
+        voiceName: voice?.name || null,  // 使用者選的語音名稱（如果找不到就給 null）
+    };
+
+       const url = `${window.location.origin}${window.location.pathname}?q=${encodeURIComponent(JSON.stringify(payload))}`;
         navigator.clipboard.writeText(url).then(() => alert('分享連結已複製！'));
-      };
+     };
+
 
       useEffect(() => {
-        const params = new URLSearchParams(window.location.search);
-        const encoded = params.get('q');
-        if (encoded) {
-          try {
-            const parsed = JSON.parse(decodeURIComponent(encoded));
-            setQuestions(parsed);
-            setOriginalQuestions(parsed);
-            setGameStarted(true);
-            setStartTime(Date.now());
-            setElapsed(0);
-            setErrorCount(0);
-            setCorrectCount(0);
-            setCurrentIndex(0);
-            setFinished(false);
-          } catch (err) {
-            console.error('載入分享題庫失敗', err);
-          }
-        }
-      }, []);
+  const params = new URLSearchParams(window.location.search);
+  const encoded = params.get('q');
+  if (!encoded) return;
+
+  try {
+    const parsed = JSON.parse(decodeURIComponent(encoded));
+
+    // 新格式：包含 questions/lang/mode/voiceName
+    if (parsed && typeof parsed === 'object' && Array.isArray(parsed.questions)) {
+      setQuestions(parsed.questions);           // 用分享時的「亂序後題目」
+      setOriginalQuestions(parsed.questions);   // 重玩時維持同一組題庫（會再洗牌）
+      if (parsed.lang) setLang(parsed.lang);
+      if (parsed.mode) setMode(parsed.mode);
+      if (parsed.voiceName) setPendingVoiceName(parsed.voiceName);
+    } else if (Array.isArray(parsed)) {
+      // 舊格式相容：只有原始題庫（開啟時仍會用原始順序）
+      setQuestions(parsed);
+      setOriginalQuestions(parsed);
+    }
+
+    setGameStarted(true);
+    hasStartedRef.current = false;
+    setStartTime(null);
+    setElapsed(0);
+    setErrorCount(0);
+    setCorrectCount(0);
+    setCurrentIndex(0);
+    setFinished(false);
+  } catch (err) {
+    console.error('載入分享題庫失敗', err);
+  }
+}, []);
+
 
       useEffect(() => {
         let timer;
@@ -112,29 +220,34 @@
       }, [gameStarted, startTime, finished]);
 
       useEffect(() => {
-        if (!parsedCurrent) return;
+       const current = questions[currentIndex] || [];
+       if (!current.length) return;
         const optionZone = document.getElementById('option-zone');
         const answerZone = document.getElementById('answer-zone');
 
-        optionZone.innerHTML = '';
-        answerZone.innerHTML = '';
+       optionZone.innerHTML = '';
+       answerZone.innerHTML = '';
+       const oldOpt = Sortable.get(optionZone);
+       if (oldOpt) oldOpt.destroy();
+       const oldAns = Sortable.get(answerZone);
+       if (oldAns) oldAns.destroy();
 
        const zhuyinOverrides = {
        '爺爺和': 'ㄧㄝˊ ㄧㄝ˙ ㄏㄜˊ',
         '爺爺': 'ㄧㄝˊ ㄧㄝ˙ ',
        '爸爸': 'ㄅㄚˋ ㄅㄚ˙',
        '媽媽': 'ㄇㄚ˙ ㄇㄚ',
+       '我': 'ㄨㄛˇ',
        };
 
 
        if (mode === 'zhuyin') {
-  parsedCurrent.forEach(word => {
-    if (!zhuyinCache[word]) {
-      // ✅ 如果有 override 就直接用
-      if (zhuyinOverrides[word]) {
-        setZhuyinCache(prev => ({ ...prev, [word]: zhuyinOverrides[word] }));
-        return;
-      }
+       current.forEach(word => {
+         if (!zhuyinCache[word]) {
+          if (zhuyinOverrides[word]) {
+           setZhuyinCache(prev => ({ ...prev, [word]: zhuyinOverrides[word] }));
+           return;
+        }
 
       // ✅ 先試整個詞查詢
       fetch(`https://www.moedict.tw/uni/${encodeURIComponent(word)}.json`)
@@ -167,7 +280,7 @@
   });
 }
 
-        shuffle(parsedCurrent).forEach(word => {
+        shuffle(current).forEach(word => {
           const div = document.createElement('div');
           div.className = 'w-[90px] p-2 border rounded bg-white text-center shadow cursor-pointer';
           div.setAttribute('data-word', word);
@@ -183,24 +296,41 @@
           group: 'shared',
           animation: 150,
           sort: false,
-          onChoose: (evt) => {
-            const dragged = evt.item?.getAttribute('data-word');
-            if (dragged) speak(dragged);
+         onChoose: (evt) => {
+           if (!hasStartedRef.current) {
+              hasStartedRef.current = true;
+              setStartTime(Date.now());
           }
+           const dragged = evt.item?.getAttribute('data-word');
+           if (dragged) speak(dragged);
+        }
+
         });
+
+        optionZone.addEventListener('click', () => {
+        if (!hasStartedRef.current) {
+           hasStartedRef.current = true;
+           setStartTime(Date.now());
+        }
+      }, { once: true });
+
 
         Sortable.create(answerZone, {
           group: 'shared',
           animation: 150,
           onStart: () => {
-            if (!startTime) setStartTime(Date.now());
-          },
+           if (!hasStartedRef.current) {
+            hasStartedRef.current = true;
+            setStartTime(Date.now());
+          }
+      },
+
           onSort: () => {
             setTimeout(() => {
               const order = Array.from(answerZone.children).map(div =>
-                div.querySelector('.word')?.textContent?.trim()
+                div.getAttribute('data-word')
               );
-              const correct = parsedCurrent;
+              const correct = current;
               const match = JSON.stringify(order) === JSON.stringify(correct);
 
               if (match && order.length === correct.length) {   
@@ -221,25 +351,60 @@
           }
         });
 
-      }, [parsedCurrent, mode, zhuyinCache]);
+      }, [questions, currentIndex, mode, zhuyinCache, voice, lang]);
 
       const parseInput = () => {
         const lines = inputRaw.split('\n').map(line => line.trim()).filter(Boolean);
         const parsed = lines.map(line => line.split('/').map(s => s.trim()));
-        setQuestions(parsed);
-        setOriginalQuestions(parsed);
-        setGameStarted(true);
-        setStartTime(Date.now());
-        setElapsed(0);
-        setErrorCount(0);
-        setCorrectCount(0);
-        setCurrentIndex(0);
-        setFinished(false);
-      };
+        const shuffled = shuffle(parsed);
+       setQuestions(shuffled);
+       setOriginalQuestions(parsed); // 保留原始順序（用於重玩）
+       setGameStarted(true);
+       setElapsed(0);
+       setErrorCount(0);
+       setCorrectCount(0);
+       setCurrentIndex(0);
+       setFinished(false);
+};
 
       return (
         React.createElement('div', null,
-        React.createElement('p', { className: 'text-left text-xl font-bold text-gray-800 mb-4 leading-relaxed' }, '句子排列 🐥🐥🐥 '),
+        React.createElement('p', { className: 'text-left text-xl font-bold text-gray-800 mb-4 leading-relaxed' }, texts.title[lang]),
+        React.createElement('div', { className: 'mb-4' },
+        React.createElement('label', { className: 'mr-2' }, `${texts.labelLanguage[lang]}：`),
+        React.createElement('select', {
+        value: lang,
+        onChange: e => setLang(e.target.value),
+       className: 'border px-2 py-1 rounded'
+     },
+       React.createElement('option', { value: 'zh-Hant' }, '繁體中文'),
+       React.createElement('option', { value: 'zh-Hans' }, '简体中文')
+     
+  ),
+  
+ // 語音下拉選單開始
+  availableVoices.length > 0 && React.createElement('div', { className: 'mt-2' },
+    React.createElement('label', { className: 'mr-2' }, `${texts.labelVoice[lang]}：`),
+    React.createElement('select', {
+      value: voice?.name,
+      onChange: e => {
+        const selected = availableVoices.find(v => v.name === e.target.value);
+        setVoice(selected);
+      },
+      className: 'border px-2 py-1 rounded'
+    },
+      ...availableVoices.map(v =>
+        React.createElement('option', { key: v.name, value: v.name },
+          `${v.name} (${v.lang})`
+        )
+      )
+    )
+  )
+  // 語音下拉選單結束
+),
+  
+  
+  
           !gameStarted ? (
             React.createElement('div', null,
               React.createElement('h1', { className: 'text-xl font-bold text-gray-700 mb-2' }, '輸入題目（每行一題，用 / 斷句）'),
@@ -252,37 +417,43 @@
               React.createElement('button', {
                 onClick: parseInput,
                 className: 'mt-4 px-4 py-2 bg-blue-600 text-white rounded'
-              }, '開始遊戲')
+              }, texts.start[lang])
             )
           ) : finished ? (
             React.createElement('div', { className: 'text-center' },
-              React.createElement('h2', { className: 'text-2xl font-bold mb-2' }, '🎉 全部完成！'),
-              React.createElement('p', null, `總時間：${elapsed} 秒`),
-              React.createElement('p', null, `完成題數：${correctCount}`),
-              React.createElement('p', null, `錯誤次數：${errorCount}`),
+              React.createElement('h2', { className: 'text-2xl font-bold mb-2' }, texts.completed[lang]),
+              React.createElement('p', null, `${texts.totalTime[lang]}：${elapsed} 秒`),
+              React.createElement('p', null, `${texts.questionsDone[lang]}：${correctCount}`),
+              React.createElement('p', null, `${texts.errors[lang]}：${errorCount}`),
               React.createElement('div', { className: 'flex justify-center gap-2 mt-4' },
                 React.createElement('button', {
                   className: 'px-4 py-2 bg-blue-600 text-white rounded',
                   onClick: () => {
-                    setQuestions(originalQuestions);
-                    setCurrentIndex(0);
-                    setCorrectCount(0);
-                    setErrorCount(0);
-                    setStartTime(Date.now());
-                    setElapsed(0);
-                    setFinished(false);
-                  }
-                }, '再玩一次'),
+                  const shuffled = shuffle(originalQuestions);
+                  setQuestions(shuffled);
+                  setCurrentIndex(0);
+                  setCorrectCount(0);
+                  setErrorCount(0);
+                  hasStartedRef.current = false;
+                  setStartTime(null);
+                  setElapsed(0);
+                  setFinished(false);
+                }
+
+                }, texts.replay[lang]),
                 React.createElement('button', {
                   className: 'px-4 py-2 bg-green-600 text-white rounded',
                   onClick: generateShareLink
-                }, '分享遊戲')
+                }, texts.share[lang])
               )
             )
           ) : (
             React.createElement('div', null,
               React.createElement('div', { className: 'mb-2 flex justify-between' },
-                React.createElement('span', null, `第 ${currentIndex + 1} 題 / 共 ${questions.length} 題`),
+                React.createElement('span', null,
+  `${texts.questionPrefix[lang]} ${currentIndex + 1} ${texts.questionSuffix[lang]} / ` +
+  `${texts.totalPrefix[lang]} ${questions.length} ${texts.totalSuffix[lang]}`
+),
                 React.createElement('button', {
                   onClick: () => setMode(mode === 'pinyin' ? 'zhuyin' : 'pinyin'),
                   className: 'text-sm px-2 py-1 border rounded bg-green-100'
@@ -305,7 +476,7 @@
                 )
               ),
               React.createElement('div', { className: 'mt-4 text-sm text-gray-600' },
-                `時間：${elapsed}s　錯誤：${errorCount}`
+                 `${texts.timeAndError[lang]}：${elapsed}s　${texts.errorCount[lang]}：${errorCount}`
               )
             )
           )
