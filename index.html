@@ -1,4 +1,3 @@
-
 <!DOCTYPE html>
 <html lang="zh-Hant">
 <head>
@@ -18,7 +17,7 @@
     }
   </script>
 </head>
-<body class="bg-sky-50">
+<body class="bg-sky-50 text-slate-900 antialiased">
   <div id="root" class="p-6 max-w-3xl mx-auto"></div>
 
   <script type="module">
@@ -27,48 +26,38 @@
     import { pinyin, customPinyin } from 'pinyin-pro';
     import shuffle from 'lodash/shuffle';
     import Sortable from 'sortablejs';
- 
-    
-    
-
 
     const CUSTOM_PINYIN_HANS = {
-  爸爸: 'bàba',
-  子: 'zi',
-  妈妈: 'māma',
-  姐姐: 'jiějie',
-  妹妹: 'mèimei',
-  饺子: 'jiǎozi',
-  奶奶: 'nǎinai',
-  爷爷: 'yéye',
-  弟弟: 'dìdi',
-  哥哥: 'gēge',
-  叔叔: 'shūshu',
-  喜欢: 'xǐhuan',   // ← 簡體
-  早上: 'zǎoshang', 
-  晚上: 'wǎnshang',
-  们: 'men',
-};
+      爸爸: 'bàba',
+      子: 'zi',
+      妈妈: 'māma',
+      姐姐: 'jiějie',
+      妹妹: 'mèimei',
+      饺子: 'jiǎozi',
+      奶奶: 'nǎinai',
+      爷爷: 'yéye',
+      弟弟: 'dìdi',
+      哥哥: 'gēge',
+      叔叔: 'shūshu',
+      喜欢: 'xǐhuan',   // ← 簡體
+      早上: 'zǎoshang', 
+      晚上: 'wǎnshang',
+      们: 'men',
+    };
 
-const CUSTOM_PINYIN_HANT = {
-  爸爸: 'bàba',
-  子: 'zi',
-  媽媽: 'māma',
-  姐姐: 'jiějie',
-  妹妹: 'mèimei',
-  餃子: 'jiǎozi',
-  奶奶: 'nǎinai',
-  爺爺: 'yéye',
-  弟弟: 'dìdi',
-  哥哥: 'gēge',
-  叔叔: 'shūshu', // ← 繁體
-  們: 'men',
-};
-      const zhuyinFallback = {
-      我: 'ㄨㄛˇ',
-      是: 'ㄕˋ',
-      老師: 'ㄌㄠˇ ㄕ',
-      學生: 'ㄒㄩㄝˊ ㄕㄥ',
+    const CUSTOM_PINYIN_HANT = {
+      爸爸: 'bàba',
+      子: 'zi',
+      媽媽: 'māma',
+      姐姐: 'jiějie',
+      妹妹: 'mèimei',
+      餃子: 'jiǎozi',
+      奶奶: 'nǎinai',
+      爺爺: 'yéye',
+      弟弟: 'dìdi',
+      哥哥: 'gēge',
+      叔叔: 'shūshu', // ← 繁體
+      們: 'men',
     };
 
     function Game() {
@@ -89,123 +78,109 @@ const CUSTOM_PINYIN_HANT = {
       const [zhuyinCache, setZhuyinCache] = useState({});
       const [pendingVoiceName, setPendingVoiceName] = useState(null);
       const hasStartedRef = React.useRef(false);
-      const parsedCurrent = questions[currentIndex];
+
       const texts = {
-    'labelLanguage': { 'zh-Hant': '語言', 'zh-Hans': '语言' },
-    'labelVoice':    { 'zh-Hant': '語音', 'zh-Hans': '语音' },
-    'start': { 'zh-Hant': '開始遊戲', 'zh-Hans': '开始游戏' },
-    'title': { 'zh-Hant': '句子排列 🐥🐥🐥', 'zh-Hans': '句子排列 🐥🐥🐥' },
-    'completed': { 'zh-Hant': '🎉 全部完成！', 'zh-Hans': '🎉 全部完成！' },
-    'totalTime': { 'zh-Hant': '總時間', 'zh-Hans': '总时间' },
-    'questionsDone': { 'zh-Hant': '完成題數', 'zh-Hans': '完成题数' },
-    'errors': { 'zh-Hant': '錯誤次數', 'zh-Hans': '错误次数' },
-    'replay': { 'zh-Hant': '再玩一次', 'zh-Hans': '再玩一次' },
-    'share': { 'zh-Hant': '分享遊戲', 'zh-Hans': '分享游戏' },
-    'timeAndError': { 'zh-Hant': '時間', 'zh-Hans': '时间' },
-    'errorCount': { 'zh-Hant': '錯誤', 'zh-Hans': '错误' },
-    'questionPrefix': { 'zh-Hant': '第', 'zh-Hans': '第' },
-    'questionSuffix': { 'zh-Hant': '題', 'zh-Hans': '题' },
-    'totalPrefix': { 'zh-Hant': '共', 'zh-Hans': '共' },
-    'totalSuffix': { 'zh-Hant': '題', 'zh-Hans': '题' },
-
-  };
-
-  useEffect(() => {
-  if (lang === 'zh-Hans') {
-    customPinyin(CUSTOM_PINYIN_HANS);
-  } else {
-    customPinyin(CUSTOM_PINYIN_HANT);
-  }
-  // 這裡不需要做其他事，之後 pinyin() 會用最新的規則
-}, [lang]);
-
-       useEffect(() => {
-  const updateVoices = () => {
-    const voices = window.speechSynthesis.getVoices();
-    const chineseVoices = voices.filter(v => v.lang.startsWith('zh'));
-    setAvailableVoices(chineseVoices);
-
-    // 1) 分享連結有指定語音名稱 → 優先選
-    if (pendingVoiceName) {
-      const matched = chineseVoices.find(v => v.name === pendingVoiceName);
-      if (matched) {
-        setVoice(matched);
-        setPendingVoiceName(null); // 用完就清掉
-        return;
-      }
-    }
-
-    // 2) 沒有指定或找不到 → 沒有選過時才給預設
-    if (!voice && chineseVoices.length > 0) {
-      setVoice(chineseVoices[0]);
-    }
-  };
-
-  updateVoices();
-  window.speechSynthesis.onvoiceschanged = updateVoices;
-}, [pendingVoiceName]);  // ← 加上依賴，讓 pendingVoiceName 改變時可再嘗試一次
-
-
-      function speak(text) {
-      const utterance = new SpeechSynthesisUtterance(text);
-      if (voice) {
-       utterance.voice = voice;
-       utterance.lang = voice.lang || (lang === 'zh-Hant' ? 'zh-TW' : 'zh-CN');
-     } else {
-       utterance.lang = lang === 'zh-Hant' ? 'zh-TW' : 'zh-CN';
-     }
-     speechSynthesis.cancel();
-     setTimeout(() => speechSynthesis.speak(utterance), 0);
-  }
-
-
-      const generateShareLink = () => {
-      const payload = {
-        questions,                 // 目前的亂序題目（照你當前看到的順序）
-        lang,                      // 遊戲語言 zh-Hant / zh-Hans
-        mode,                      // pinyin / zhuyin
-        voiceName: voice?.name || null,  // 使用者選的語音名稱（如果找不到就給 null）
-    };
-
-       const url = `${window.location.origin}${window.location.pathname}?q=${encodeURIComponent(JSON.stringify(payload))}`;
-        navigator.clipboard.writeText(url).then(() => alert('分享連結已複製！'));
-     };
-
+        'labelLanguage': { 'zh-Hant': '語言', 'zh-Hans': '语言' },
+        'labelVoice':    { 'zh-Hant': '語音', 'zh-Hans': '语音' },
+        'start': { 'zh-Hant': '開始遊戲', 'zh-Hans': '开始游戏' },
+        'title': { 'zh-Hant': '句子排列 🐥🐥🐥', 'zh-Hans': '句子排列 🐥🐥🐥' },
+        'completed': { 'zh-Hant': '🎉 全部完成！', 'zh-Hans': '🎉 全部完成！' },
+        'totalTime': { 'zh-Hant': '總時間', 'zh-Hans': '总时间' },
+        'questionsDone': { 'zh-Hant': '完成題數', 'zh-Hans': '完成题数' },
+        'errors': { 'zh-Hant': '錯誤次數', 'zh-Hans': '错误次数' },
+        'replay': { 'zh-Hant': '再玩一次', 'zh-Hans': '再玩一次' },
+        'share': { 'zh-Hant': '分享遊戲', 'zh-Hans': '分享游戏' },
+        'timeAndError': { 'zh-Hant': '時間', 'zh-Hans': '时间' },
+        'errorCount': { 'zh-Hant': '錯誤', 'zh-Hans': '错误' },
+        'questionPrefix': { 'zh-Hant': '第', 'zh-Hans': '第' },
+        'questionSuffix': { 'zh-Hant': '題', 'zh-Hans': '题' },
+        'totalPrefix': { 'zh-Hant': '共', 'zh-Hans': '共' },
+        'totalSuffix': { 'zh-Hant': '題', 'zh-Hans': '题' },
+      };
 
       useEffect(() => {
-  const params = new URLSearchParams(window.location.search);
-  const encoded = params.get('q');
-  if (!encoded) return;
+        if (lang === 'zh-Hans') {
+          customPinyin(CUSTOM_PINYIN_HANS);
+        } else {
+          customPinyin(CUSTOM_PINYIN_HANT);
+        }
+      }, [lang]);
 
-  try {
-    const parsed = JSON.parse(decodeURIComponent(encoded));
+      useEffect(() => {
+        const updateVoices = () => {
+          const voices = window.speechSynthesis.getVoices();
+          const chineseVoices = voices.filter(v => v.lang.startsWith('zh'));
+          setAvailableVoices(chineseVoices);
 
-    // 新格式：包含 questions/lang/mode/voiceName
-    if (parsed && typeof parsed === 'object' && Array.isArray(parsed.questions)) {
-      setQuestions(parsed.questions);           // 用分享時的「亂序後題目」
-      setOriginalQuestions(parsed.questions);   // 重玩時維持同一組題庫（會再洗牌）
-      if (parsed.lang) setLang(parsed.lang);
-      if (parsed.mode) setMode(parsed.mode);
-      if (parsed.voiceName) setPendingVoiceName(parsed.voiceName);
-    } else if (Array.isArray(parsed)) {
-      // 舊格式相容：只有原始題庫（開啟時仍會用原始順序）
-      setQuestions(parsed);
-      setOriginalQuestions(parsed);
-    }
+          if (pendingVoiceName) {
+            const matched = chineseVoices.find(v => v.name === pendingVoiceName);
+            if (matched) {
+              setVoice(matched);
+              setPendingVoiceName(null);
+              return;
+            }
+          }
 
-    setGameStarted(true);
-    hasStartedRef.current = false;
-    setStartTime(null);
-    setElapsed(0);
-    setErrorCount(0);
-    setCorrectCount(0);
-    setCurrentIndex(0);
-    setFinished(false);
-  } catch (err) {
-    console.error('載入分享題庫失敗', err);
-  }
-}, []);
+          if (!voice && chineseVoices.length > 0) {
+            setVoice(chineseVoices[0]);
+          }
+        };
 
+        updateVoices();
+        window.speechSynthesis.onvoiceschanged = updateVoices;
+      }, [pendingVoiceName]);
+
+      function speak(text) {
+        const utterance = new SpeechSynthesisUtterance(text);
+        if (voice) {
+          utterance.voice = voice;
+          utterance.lang = voice.lang || (lang === 'zh-Hant' ? 'zh-TW' : 'zh-CN');
+        } else {
+          utterance.lang = lang === 'zh-Hant' ? 'zh-TW' : 'zh-CN';
+        }
+        speechSynthesis.cancel();
+        setTimeout(() => speechSynthesis.speak(utterance), 0);
+      }
+
+      const generateShareLink = () => {
+        const payload = {
+          questions,
+          lang,
+          mode,
+          voiceName: voice?.name || null,
+        };
+        const url = `${window.location.origin}${window.location.pathname}?q=${encodeURIComponent(JSON.stringify(payload))}`;
+        navigator.clipboard.writeText(url).then(() => alert('分享連結已複製！'));
+      };
+
+      useEffect(() => {
+        const params = new URLSearchParams(window.location.search);
+        const encoded = params.get('q');
+        if (!encoded) return;
+        try {
+          const parsed = JSON.parse(decodeURIComponent(encoded));
+          if (parsed && typeof parsed === 'object' && Array.isArray(parsed.questions)) {
+            setQuestions(parsed.questions);
+            setOriginalQuestions(parsed.questions);
+            if (parsed.lang) setLang(parsed.lang);
+            if (parsed.mode) setMode(parsed.mode);
+            if (parsed.voiceName) setPendingVoiceName(parsed.voiceName);
+          } else if (Array.isArray(parsed)) {
+            setQuestions(parsed);
+            setOriginalQuestions(parsed);
+          }
+          setGameStarted(true);
+          hasStartedRef.current = false;
+          setStartTime(null);
+          setElapsed(0);
+          setErrorCount(0);
+          setCorrectCount(0);
+          setCurrentIndex(0);
+          setFinished(false);
+        } catch (err) {
+          console.error('載入分享題庫失敗', err);
+        }
+      }, []);
 
       useEffect(() => {
         let timer;
@@ -214,80 +189,70 @@ const CUSTOM_PINYIN_HANT = {
             setElapsed(Math.floor((Date.now() - startTime) / 1000));
           }, 1000);
         }
-        return () => {
-          if (timer) clearInterval(timer);
-        };
+        return () => { if (timer) clearInterval(timer); };
       }, [gameStarted, startTime, finished]);
 
       useEffect(() => {
-       const current = questions[currentIndex] || [];
-       if (!current.length) return;
+        const current = questions[currentIndex] || [];
+        if (!current.length) return;
         const optionZone = document.getElementById('option-zone');
         const answerZone = document.getElementById('answer-zone');
 
-       optionZone.innerHTML = '';
-       answerZone.innerHTML = '';
-       const oldOpt = Sortable.get(optionZone);
-       if (oldOpt) oldOpt.destroy();
-       const oldAns = Sortable.get(answerZone);
-       if (oldAns) oldAns.destroy();
+        optionZone.innerHTML = '';
+        answerZone.innerHTML = '';
+        const oldOpt = Sortable.get(optionZone); if (oldOpt) oldOpt.destroy();
+        const oldAns = Sortable.get(answerZone); if (oldAns) oldAns.destroy();
 
-       const zhuyinOverrides = {
-       '爺爺和': 'ㄧㄝˊ ㄧㄝ˙ ㄏㄜˊ',
-        '爺爺': 'ㄧㄝˊ ㄧㄝ˙ ',
-       '爸爸': 'ㄅㄚˋ ㄅㄚ˙',
-       '媽媽': 'ㄇㄚ˙ ㄇㄚ',
-       '我': 'ㄨㄛˇ',
-       };
+        const zhuyinOverrides = {
+          '爺爺和': 'ㄧㄝˊ ㄧㄝ˙ ㄏㄜˊ',
+          '爺爺': 'ㄧㄝˊ ㄧㄝ˙ ',
+          '爸爸': 'ㄅㄚˋ ㄅㄚ˙',
+          '媽媽': 'ㄇㄚ˙ ㄇㄚ',
+          '我': 'ㄨㄛˇ',
+        };
 
-
-       if (mode === 'zhuyin') {
-       current.forEach(word => {
-         if (!zhuyinCache[word]) {
-          if (zhuyinOverrides[word]) {
-           setZhuyinCache(prev => ({ ...prev, [word]: zhuyinOverrides[word] }));
-           return;
-        }
-
-      // ✅ 先試整個詞查詢
-      fetch(`https://www.moedict.tw/uni/${encodeURIComponent(word)}.json`)
-        .then(res => res.json())
-        .then(data => {
-          const raw = data?.heteronyms?.[0]?.bopomofo || '';
-          const isValid = /^[\u3100-\u312F\u02CA\u02C7\u02CB\u02D9\s]+$/.test(raw);
-          if (isValid) {
-            setZhuyinCache(prev => ({ ...prev, [word]: raw }));
-          } else {
-            // ❗ 整個詞查不到 → 改用逐字查詢
-            const chars = [...word];
-            const promises = chars.map(char =>
-              fetch(`https://www.moedict.tw/uni/${encodeURIComponent(char)}.json`)
+        if (mode === 'zhuyin') {
+          current.forEach(word => {
+            if (!zhuyinCache[word]) {
+              if (zhuyinOverrides[word]) {
+                setZhuyinCache(prev => ({ ...prev, [word]: zhuyinOverrides[word] }));
+                return;
+              }
+              fetch(`https://www.moedict.tw/uni/${encodeURIComponent(word)}.json`)
                 .then(res => res.json())
-                .then(cdata => cdata?.heteronyms?.[0]?.bopomofo || '[無]')
-                .catch(() => '[錯誤]')
-            );
-
-            Promise.all(promises).then(results => {
-              const combined = results.join(' ');
-              setZhuyinCache(prev => ({ ...prev, [word]: combined }));
-            });
-          }
-        })
-        .catch(() => {
-          setZhuyinCache(prev => ({ ...prev, [word]: '[錯誤]' }));
-        });
-    }
-  });
-}
+                .then(data => {
+                  const raw = data?.heteronyms?.[0]?.bopomofo || '';
+                  const isValid = /^[\u3100-\u312F\u02CA\u02C7\u02CB\u02D9\s]+$/.test(raw);
+                  if (isValid) {
+                    setZhuyinCache(prev => ({ ...prev, [word]: raw }));
+                  } else {
+                    const chars = [...word];
+                    const promises = chars.map(char =>
+                      fetch(`https://www.moedict.tw/uni/${encodeURIComponent(char)}.json`)
+                        .then(res => res.json())
+                        .then(cdata => cdata?.heteronyms?.[0]?.bopomofo || '[無]')
+                        .catch(() => '[錯誤]')
+                    );
+                    Promise.all(promises).then(results => {
+                      const combined = results.join(' ');
+                      setZhuyinCache(prev => ({ ...prev, [word]: combined }));
+                    });
+                  }
+                })
+                .catch(() => {
+                  setZhuyinCache(prev => ({ ...prev, [word]: '[錯誤]' }));
+                });
+            }
+          });
+        }
 
         shuffle(current).forEach(word => {
           const div = document.createElement('div');
-          div.className = 'w-[90px] p-2 border rounded bg-white text-center shadow cursor-pointer';
+          div.className = 'min-w-[88px] px-3 py-2 border border-slate-200 rounded-xl bg-white text-center shadow-sm cursor-pointer hover:shadow transition-shadow focus:outline-none focus:ring-2 focus:ring-sky-400';
           div.setAttribute('data-word', word);
-          // 去除 onclick 以免爆聲
           div.innerHTML = `
-            <div class="word font-bold">${word}</div>
-            <div class="text-xs text-gray-600">${mode === 'pinyin' ? pinyin(word, { toneType: 'mark' }) : (zhuyinCache[word] || '查詢中...')}</div>
+            <div class="word text-base sm:text-lg font-bold leading-tight">${word}</div>
+            <div class="text-[11px] sm:text-xs text-gray-600 mt-0.5">${mode === 'pinyin' ? pinyin(word, { toneType: 'mark' }) : (zhuyinCache[word] || '查詢中...')}</div>
           `;
           optionZone.appendChild(div);
         });
@@ -296,44 +261,39 @@ const CUSTOM_PINYIN_HANT = {
           group: 'shared',
           animation: 150,
           sort: false,
-         onChoose: (evt) => {
-           if (!hasStartedRef.current) {
+          onChoose: (evt) => {
+            if (!hasStartedRef.current) {
               hasStartedRef.current = true;
               setStartTime(Date.now());
+            }
+            const dragged = evt.item?.getAttribute('data-word');
+            if (dragged) speak(dragged);
           }
-           const dragged = evt.item?.getAttribute('data-word');
-           if (dragged) speak(dragged);
-        }
-
         });
 
         optionZone.addEventListener('click', () => {
-        if (!hasStartedRef.current) {
-           hasStartedRef.current = true;
-           setStartTime(Date.now());
-        }
-      }, { once: true });
-
+          if (!hasStartedRef.current) {
+            hasStartedRef.current = true;
+            setStartTime(Date.now());
+          }
+        }, { once: true });
 
         Sortable.create(answerZone, {
           group: 'shared',
           animation: 150,
           onStart: () => {
-           if (!hasStartedRef.current) {
-            hasStartedRef.current = true;
-            setStartTime(Date.now());
-          }
-      },
-
+            if (!hasStartedRef.current) {
+              hasStartedRef.current = true;
+              setStartTime(Date.now());
+            }
+          },
           onSort: () => {
             setTimeout(() => {
-              const order = Array.from(answerZone.children).map(div =>
-                div.getAttribute('data-word')
-              );
+              const order = Array.from(answerZone.children).map(div => div.getAttribute('data-word'));
               const correct = current;
               const match = JSON.stringify(order) === JSON.stringify(correct);
 
-              if (match && order.length === correct.length) {   
+              if (match && order.length === correct.length) {
                 setCorrectCount(c => c + 1);
                 if (currentIndex + 1 === questions.length) {
                   setFinished(true);
@@ -357,67 +317,80 @@ const CUSTOM_PINYIN_HANT = {
         const lines = inputRaw.split('\n').map(line => line.trim()).filter(Boolean);
         const parsed = lines.map(line => line.split('/').map(s => s.trim()));
         const shuffled = shuffle(parsed);
-       setQuestions(shuffled);
-       setOriginalQuestions(parsed); // 保留原始順序（用於重玩）
-       setGameStarted(true);
-       setElapsed(0);
-       setErrorCount(0);
-       setCorrectCount(0);
-       setCurrentIndex(0);
-       setFinished(false);
-};
+        setQuestions(shuffled);
+        setOriginalQuestions(parsed);
+        setGameStarted(true);
+        setElapsed(0);
+        setErrorCount(0);
+        setCorrectCount(0);
+        setCurrentIndex(0);
+        setFinished(false);
+      };
 
       return (
-        React.createElement('div', null,
-        React.createElement('p', { className: 'text-left text-xl font-bold text-gray-800 mb-4 leading-relaxed' }, texts.title[lang]),
-        React.createElement('div', { className: 'mb-4' },
-        React.createElement('label', { className: 'mr-2' }, `${texts.labelLanguage[lang]}：`),
-        React.createElement('select', {
-        value: lang,
-        onChange: e => setLang(e.target.value),
-       className: 'border px-2 py-1 rounded'
-     },
-       React.createElement('option', { value: 'zh-Hant' }, '繁體中文'),
-       React.createElement('option', { value: 'zh-Hans' }, '简体中文')
-     
-  ),
-  
- // 語音下拉選單開始
-  availableVoices.length > 0 && React.createElement('div', { className: 'mt-2' },
-    React.createElement('label', { className: 'mr-2' }, `${texts.labelVoice[lang]}：`),
-    React.createElement('select', {
-      value: voice?.name,
-      onChange: e => {
-        const selected = availableVoices.find(v => v.name === e.target.value);
-        setVoice(selected);
-      },
-      className: 'border px-2 py-1 rounded'
-    },
-      ...availableVoices.map(v =>
-        React.createElement('option', { key: v.name, value: v.name },
-          `${v.name} (${v.lang})`
-        )
-      )
-    )
-  )
-  // 語音下拉選單結束
-),
-  
-  
-  
+        React.createElement('div', { className: 'bg-white/90 backdrop-blur rounded-2xl shadow-sm ring-1 ring-slate-200 p-4 sm:p-6' },
+          // Header：標題 + 控制列
+          React.createElement('header', { className: 'mb-4 space-y-3' },
+            React.createElement('h1', { className: 'text-2xl font-bold text-gray-900 tracking-tight' }, texts.title[lang]),
+            (!finished && React.createElement('div', { className: 'flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3' },
+              // 左側：語言 + 語音
+              React.createElement('div', { className: 'flex flex-wrap items-center gap-3' },
+                React.createElement('label', { className: 'text-sm font-medium text-gray-700' }, `${texts.labelLanguage[lang]}：`),
+                React.createElement('select', {
+                  value: lang,
+                  onChange: e => setLang(e.target.value),
+                  className: 'border px-2 py-1 rounded bg-white text-gray-800 focus:outline-none focus:ring-2 focus:ring-sky-400'
+                },
+                  React.createElement('option', { value: 'zh-Hant' }, '繁體中文'),
+                  React.createElement('option', { value: 'zh-Hans' }, '简体中文')
+                ),
+                (availableVoices.length > 0) && React.createElement(React.Fragment, null,
+                  React.createElement('label', { className: 'text-sm font-medium text-gray-700' }, `${texts.labelVoice[lang]}：`),
+                  React.createElement('select', {
+                    value: voice?.name,
+                    onChange: e => {
+                      const selected = availableVoices.find(v => v.name === e.target.value);
+                      setVoice(selected);
+                    },
+                    className: 'border px-2 py-1 rounded bg-white text-gray-800 focus:outline-none focus:ring-2 focus:ring-sky-400'
+                  },
+                    ...availableVoices.map(v =>
+                      React.createElement('option', { key: v.name, value: v.name }, `${v.name} (${v.lang})`)
+                    )
+                  )
+                )
+              ),
+              // 右側：拼音/注音切換
+              React.createElement('div', { className: 'inline-flex rounded-lg overflow-hidden border' },
+                React.createElement('button', {
+                  onClick: () => setMode('pinyin'),
+                  className: `px-3 py-1 text-sm ${mode === 'pinyin' ? 'bg-sky-600 text-white' : 'bg-white text-gray-700 hover:bg-gray-50'}`
+                }, '拼音'),
+                React.createElement('button', {
+                  onClick: () => setMode('zhuyin'),
+                  className: `px-3 py-1 text-sm border-l ${mode === 'zhuyin' ? 'bg-sky-600 text-white' : 'bg-white text-gray-700 hover:bg-gray-50'}`
+                }, '注音')
+              )
+            ))
+          ),
+
+          // 主體
           !gameStarted ? (
-            React.createElement('div', null,
-              React.createElement('h1', { className: 'text-xl font-bold text-gray-700 mb-2' }, '輸入題目（每行一題，用 / 斷句）'),
+            React.createElement('div', { className: 'space-y-3' },
+              React.createElement('h2', { className: 'text-lg font-semibold text-gray-800' }, '輸入題目（每行一題，用 / 斷句）'),
               React.createElement('textarea', {
-                className: 'w-full h-40 p-2 border rounded',
+                className: 'w-full h-40 p-3 border rounded-lg bg-white text-gray-800 placeholder:text-gray-400 focus:outline-none focus:ring-2 focus:ring-sky-400',
                 placeholder: '例如：我/是/老師',
                 value: inputRaw,
                 onChange: e => setInputRaw(e.target.value)
               }),
-              React.createElement('button', {
-                onClick: parseInput,
-                className: 'mt-4 px-4 py-2 bg-blue-600 text-white rounded'
-              }, texts.start[lang])
+              React.createElement('div', { className: 'flex items-center justify-between' },
+                React.createElement('span', { className: 'text-xs text-gray-500' }, '小技巧：用「Enter」換行新增下一題'),
+                React.createElement('button', {
+                  onClick: parseInput,
+                  className: 'inline-flex items-center gap-2 px-4 py-2 rounded-lg bg-sky-600 text-white hover:bg-sky-700 active:bg-sky-800 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-sky-400'
+                }, texts.start[lang])
+              )
             )
           ) : finished ? (
             React.createElement('div', { className: 'text-center' },
@@ -427,56 +400,60 @@ const CUSTOM_PINYIN_HANT = {
               React.createElement('p', null, `${texts.errors[lang]}：${errorCount}`),
               React.createElement('div', { className: 'flex justify-center gap-2 mt-4' },
                 React.createElement('button', {
-                  className: 'px-4 py-2 bg-blue-600 text-white rounded',
+                  className: 'px-4 py-2 rounded-lg bg-sky-600 text-white hover:bg-sky-700 active:bg-sky-800 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-sky-400',
                   onClick: () => {
-                  const shuffled = shuffle(originalQuestions);
-                  setQuestions(shuffled);
-                  setCurrentIndex(0);
-                  setCorrectCount(0);
-                  setErrorCount(0);
-                  hasStartedRef.current = false;
-                  setStartTime(null);
-                  setElapsed(0);
-                  setFinished(false);
-                }
-
+                    const shuffled = shuffle(originalQuestions);
+                    setQuestions(shuffled);
+                    setCurrentIndex(0);
+                    setCorrectCount(0);
+                    setErrorCount(0);
+                    hasStartedRef.current = false;
+                    setStartTime(null);
+                    setElapsed(0);
+                    setFinished(false);
+                  }
                 }, texts.replay[lang]),
                 React.createElement('button', {
-                  className: 'px-4 py-2 bg-green-600 text-white rounded',
+                  className: 'px-4 py-2 rounded-lg bg-emerald-600 text-white hover:bg-emerald-700 active:bg-emerald-800 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-emerald-400',
                   onClick: generateShareLink
                 }, texts.share[lang])
               )
             )
           ) : (
             React.createElement('div', null,
-              React.createElement('div', { className: 'mb-2 flex justify-between' },
-                React.createElement('span', null,
-  `${texts.questionPrefix[lang]} ${currentIndex + 1} ${texts.questionSuffix[lang]} / ` +
-  `${texts.totalPrefix[lang]} ${questions.length} ${texts.totalSuffix[lang]}`
-),
-                React.createElement('button', {
-                  onClick: () => setMode(mode === 'pinyin' ? 'zhuyin' : 'pinyin'),
-                  className: 'text-sm px-2 py-1 border rounded bg-green-100'
-                }, `${mode === 'pinyin' ? '注音モードに変更' : '拼音モードに変更'}`)
+              // 頂部進度 + 計時/錯誤
+              React.createElement('div', { className: 'mb-3' },
+                React.createElement('div', { className: 'flex items-center justify-between text-sm text-gray-700' },
+                  React.createElement('span', { className: 'font-medium' },
+                    `${texts.questionPrefix[lang]} ${currentIndex + 1} ${texts.questionSuffix[lang]} / ${texts.totalPrefix[lang]} ${questions.length} ${texts.totalSuffix[lang]}`
+                  ),
+                  React.createElement('span', { className: 'text-gray-600', 'aria-live': 'polite' },
+                    `${texts.timeAndError[lang]}：${elapsed}s　${texts.errorCount[lang]}：${errorCount}`
+                  )
+                ),
+                React.createElement('div', { className: 'mt-2 h-2 w-full bg-slate-100 rounded-full overflow-hidden' },
+                  React.createElement('div', {
+                    className: 'h-full bg-sky-500 transition-[width] duration-300',
+                    style: { width: `${(currentIndex / Math.max(questions.length, 1)) * 100}%` }
+                  })
+                )
               ),
+
+              // 選項/答案區
               React.createElement('div', { className: 'grid grid-cols-1 gap-4' },
                 React.createElement('div', null,
-                  React.createElement('h3', { className: 'text-sm mb-1 text-gray-600' },),
                   React.createElement('div', {
                     id: 'option-zone',
-                    className: 'min-h-[80px] flex flex-wrap gap-2 border p-2 bg-rose-100 rounded'
+                    className: 'min-h-[96px] flex flex-wrap gap-2 border border-rose-200 p-2 bg-rose-50 rounded-lg'
                   })
                 ),
                 React.createElement('div', null,
                   React.createElement('h3', { className: 'text-sm mb-1 text-gray-600' }, '文を正しい順番に並べてください。'),
                   React.createElement('div', {
                     id: 'answer-zone',
-                    className: 'min-h-[80px] flex flex-wrap gap-2 border p-2 bg-white rounded'
+                    className: 'min-h-[96px] flex flex-wrap gap-2 border border-slate-200 p-2 bg-white rounded-lg'
                   })
                 )
-              ),
-              React.createElement('div', { className: 'mt-4 text-sm text-gray-600' },
-                 `${texts.timeAndError[lang]}：${elapsed}s　${texts.errorCount[lang]}：${errorCount}`
               )
             )
           )
