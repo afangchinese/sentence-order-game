@@ -1,3 +1,4 @@
+
 <!DOCTYPE html>
 <html lang="zh-Hant">
 <head>
@@ -60,6 +61,37 @@
       們: 'men',
     };
 
+
+    const correctAudio = new Audio('sounds/correct.mp3');
+    const wrongAudio = new Audio('sounds/wrong.mp3');
+    correctAudio.preload = 'auto';
+    wrongAudio.preload = 'auto';
+    correctAudio.load();
+    wrongAudio.load();
+
+    function unlockAudioOnce() {
+    const tryUnlock = (a) => {
+    try {
+      const p = a.play();
+      if (p && typeof p.then === 'function') {
+        p.then(() => {
+          a.pause();
+          a.currentTime = 0;
+        }).catch(() => {});
+      } else {
+        a.pause();
+        a.currentTime = 0;
+      }
+       } catch (_) {}
+     };
+    tryUnlock(correctAudio);
+    tryUnlock(wrongAudio);
+    document.removeEventListener('pointerdown', unlockAudioOnce);
+    document.removeEventListener('touchend', unlockAudioOnce);
+}
+    document.addEventListener('pointerdown', unlockAudioOnce, { once: true, passive: true });
+    document.addEventListener('touchend', unlockAudioOnce, { once: true, passive: true });
+    
     function Game() {
       const [lang, setLang] = useState('zh-Hant');
       const [voice, setVoice] = useState(null);
@@ -297,12 +329,14 @@
                 setCorrectCount(c => c + 1);
                 if (currentIndex + 1 === questions.length) {
                   setFinished(true);
-                  new Audio('sounds/correct.mp3').play();
+                  correctAudio.currentTime = 0;
+                  correctAudio.play().catch(() => {});
                 } else {
                   setCurrentIndex(i => i + 1);
                 }
               } else if (order.length === correct.length) {
-                new Audio('sounds/wrong.mp3').play();
+                wrongAudio.currentTime = 0;
+                wrongAudio.play().catch(() => {});
                 setErrorCount(c => c + 1);
                 const wrongTiles = Array.from(answerZone.children);
                 wrongTiles.forEach(tile => optionZone.appendChild(tile));
